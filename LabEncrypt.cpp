@@ -1,5 +1,5 @@
-#include "LabPasscode.h"
-#include "LabEEPROM.h"
+#include "LabEncrypt.h"
+
 
 // The passcode class is an array of characters. Keypresses are stored in a
 // passcode object as ascii text.
@@ -19,17 +19,18 @@
 // as the encoded key.
 
 
-static int Offset(const Passcode& keypadInput) { //Find a starting offset
+static int Offset(const Passcode& pass) { //Find a starting offset
     if (pass.size() > 2) {
         //make sure the passcode is long enough, this is enforced elsewhere and double-checked here
-        int mod = pass[2] - '0'; //take the second digit of the character array, convert from ascii to int
-        if (mod > 0 && mod <= 9) { //if the second digit is 0, just return 0
-            return (pass.size() + (pass[1] - '0')) % 36;
-            // calculate a starting offset
-            // take the length of the passcode, add the 2nd digit the user entered
-            // return that value % 36
-            // "psuedorandom" value between 0-35
-        }
+        int dig1 = pass[0] - '0'; //take the first digit of the character array, convert from ascii to int
+        int dig2 = pass[1] - '0';
+        int dig3 = pass[2] - '0'; 
+        return (pass.size() + dig1 + dig2 + dig3) % 36;
+        // calculate a starting offset
+        // add the first 3 digits together + size
+        // return that value % 36
+        // "psuedorandom" value between 0-35
+        
     }
 
     return 0;
@@ -52,24 +53,58 @@ static char EncodeChar(int value) { //take a value from 0-36, return 0-9 or A-Z
 // reversing the passcode.
 
 // To reverse the first character, you need to know the original value
-// of second character
+// of the first 3 characters + password length
 
 void encryptPass(const Passcode& pass, Passcode& encrypted) {
+    const int outputLength = 32;
+    int passLength = pass.size();
     int offset = Offset(pass); // generate initial offset
+    int prevEnc = 0;
+    encrypted.clear();
 
-    for (int i = 0; i < pass.size(); i++) {
-        int digit = pass[i] - '0';
-        //convert current digit from ascii to int
-        int enc = (digit + offset) % 36;
+    for (int i = 0; i < (outputLength + 1); i++) {
+        int digit = 0;
+        int enc = 0;
+
+        if (i < passLength) { //use the real digit while they are still available
+            digit = pass[i] - '0';
+        } else {
+            //start padding out using psuedo-random digits from the passcode itself
+            int index = prevEnc % passLength;
+            digit = pass[index] - '0'; 
+
+            if (i % 2 == 1) {
+                digit = (digit + 1) * i;
+            } //breaks up output pattern in codes like 0000, 1111, etc
+
+        }
+        
+
+
+        enc = (digit + offset) % 36;
         //take the value of the current digit and add the offset
         // % 36
-        encrypted += EncodeChar(enc);
-        // take some value from 1-36 and encode to a character
-        offset = (offset + enc + i + 1) % 36;
+
+        if (i == outputLength) {
+            //encrypted[0] = EncodeChar(enc);
+            // loop back to the beginning, obscuring the first character
+        } else {
+            encrypted += EncodeChar(enc);
+            // this is what runs for most of the loop
+            // take some value from 0-35 and encode to a character
+        }
+
+
+
+
+        offset = (offset + enc + i + passLength) % 36;
         //generate a new offset, based on:
         // the previous offset
         // where we are in the loop
         // the semi-random digit we made up
-        // add 1 to prevent divide by 0
+        // the pass length
+
+        prevEnc = enc;
+
     }
 }
